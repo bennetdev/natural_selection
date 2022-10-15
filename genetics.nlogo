@@ -16,7 +16,7 @@
 globals[lived max-age day avg-speed-forever]
 breed[human a-human]
 breed[foods food]
-human-own[energy foods-found speed age generation num-kids]
+human-own[energy foods-found speed age generation num-kids greed got-greedy]
 
 
 to setup
@@ -27,7 +27,7 @@ to setup
   ; create human and food
   create-human init-human
   create-foods init-foods
-  ask human[set speed init-speed]
+  ask human[set speed init-speed set greed 0.5]
   ; position human to sides of patch
   reset-human
   ; distribute food in the middle of the patch
@@ -43,8 +43,9 @@ end
 to step
   ask human[
     ifelse energy > 0 [
-      ifelse foods-found = 2 [
+      ifelse (foods-found = 2 and got-greedy != 1) or foods-found = 3[
         ; TODO: should return to edge of patch
+        ifelse random-float 1 <= greed and got-greedy = 0 [set got-greedy 1 set color brown] [set got-greedy -1]
       ]
       [
         ; rotate randomly and move
@@ -83,7 +84,7 @@ to try-eat
   if any? all-foods-found [
     ; add to foods-found counter
     set foods-found (foods-found + 1)
-    ifelse foods-found = 1 [set color orange] [set color red]
+    ifelse foods-found = 1 [set color orange] [ifelse foods-found = 2 [set color red] [set color black]]
     ; delete eaten food
     ask one-of all-foods-found[
       die
@@ -97,9 +98,15 @@ to reproduce-human
   ask human with [foods-found = 2][
     let new-num-kids (num-kids + 1)
     set num-kids new-num-kids
+    set got-greedy 0
     hatch 1 [
       ;set speed (precision ((random-float (speed + 0.1 * speed)) + (speed - 0.1 * speed)) 2)
-      if mutations [set speed (speed + (precision (random-float (0.2) - 0.1) 2))]
+      if mutations [
+        set speed precision (speed + (random-float (0.2) - 0.1)) 2
+        set greed precision (greed + (random-float (0.2) - 0.1)) 2
+        ; minimum greed is 0 because it has no effect on zero
+        if greed < 0 [set greed 0]
+      ]
       if new-num-kids = 1 [set generation (generation + 1)]
 
       set num-kids 0
@@ -111,15 +118,15 @@ to reproduce-human
 end
 
 to kill-human
-  ask human with [foods-found = 0] [die]
+  ask human with [foods-found = 0 or (foods-found = 2 and got-greedy = 1)] [die]
 end
 
 to reset-human
   reproduce-human
   ask human[
     if age > max-age [set max-age age]
-    ; reset energy
-    set energy 100
+    ; reset energy and give more energy if human found 2 foods
+    ifelse foods-found = 3 [set energy (default-energy + (greed-advantadge * default-energy))] [set energy default-energy]
     ; reset food
     set foods-found 0
     ; reset color
@@ -151,7 +158,7 @@ to reset-foods
   ]
 end
 
-; TODO
+; TODO: return human to sides when they have enough food
 to return-a-human
 
 end
@@ -241,9 +248,9 @@ NIL
 
 MONITOR
 21
-88
+75
 78
-133
+120
 alive
 count human
 17
@@ -252,9 +259,9 @@ count human
 
 MONITOR
 80
-88
+75
 137
-133
+120
 food
 count foods
 17
@@ -263,9 +270,9 @@ count foods
 
 SLIDER
 21
-141
+128
 138
-174
+161
 init-human
 init-human
 0
@@ -277,10 +284,10 @@ NIL
 HORIZONTAL
 
 PLOT
-11
-299
-323
-449
+10
+322
+322
+472
 pupolations
 time
 population
@@ -296,9 +303,9 @@ PENS
 
 SLIDER
 21
-173
+160
 138
-206
+193
 init-foods
 init-foods
 0
@@ -311,9 +318,9 @@ HORIZONTAL
 
 MONITOR
 139
-88
+75
 196
-133
+120
 NIL
 lived
 17
@@ -322,9 +329,9 @@ lived
 
 SWITCH
 139
-141
+128
 233
-174
+161
 mutations
 mutations
 0
@@ -333,9 +340,9 @@ mutations
 
 MONITOR
 198
-88
+75
 260
-133
+120
 NIL
 max-age
 17
@@ -343,10 +350,10 @@ max-age
 11
 
 MONITOR
-24
-249
-99
-294
+23
+272
+98
+317
 avg. speed
 precision (mean [speed] of human) 2
 17
@@ -355,9 +362,9 @@ precision (mean [speed] of human) 2
 
 SLIDER
 139
-174
+161
 267
-207
+194
 speed-cost-factor
 speed-cost-factor
 0
@@ -369,10 +376,10 @@ NIL
 HORIZONTAL
 
 MONITOR
-101
-249
-158
-294
+100
+272
+157
+317
 NIL
 day
 17
@@ -380,11 +387,11 @@ day
 11
 
 PLOT
-15
-458
-322
-608
-speed-histogramm
+14
+481
+321
+631
+speed-histogram
 NIL
 NIL
 0.0
@@ -398,10 +405,10 @@ PENS
 "avg-speed" 1.0 1 -2674135 true "" "histogram [speed] of human"
 
 PLOT
-329
-460
-591
-610
+328
+483
+590
+633
 speed-histogram-forever
 NIL
 NIL
@@ -417,9 +424,9 @@ PENS
 
 SLIDER
 21
-206
+193
 138
-239
+226
 init-speed
 init-speed
 0.1
@@ -431,15 +438,63 @@ NIL
 HORIZONTAL
 
 MONITOR
-160
-249
-233
-294
+159
+272
+232
+317
 generation
 max ([generation] of human)
 17
 1
 11
+
+PLOT
+15
+633
+215
+783
+greed-histogram
+NIL
+NIL
+0.0
+1.0
+0.0
+50.0
+true
+false
+"set-histogram-num-bars 10" ""
+PENS
+"default" 1.0 1 -16777216 true "" "histogram [greed] of human"
+
+SLIDER
+21
+226
+138
+259
+default-energy
+default-energy
+0
+200
+80.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+141
+228
+269
+261
+greed-advantadge
+greed-advantadge
+0
+2
+1.0
+0.1
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
